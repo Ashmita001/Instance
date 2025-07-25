@@ -26,16 +26,19 @@
   {% if search_by == 'user_id' %}
     <h5>Results for User ID: {{ query }}</h5>
     {% if results %}
-      <ul class="list-group">
-        {% for record in results %}
-        <li class="list-group-item">
-          Spot ID: {{ record.spot_id }} | Vehicle: {{ record.vehicle_number }} | Start Time: {{ record.start_time }} | Cost: ₹{{ record.estimated_cost or "Pending" }}
-        </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>No parking records found for this user.</p>
-    {% endif %}
+  {% for record in results %}
+    <div class="card mt-3">
+      <div class="card-body">
+        <p><strong>Spot ID:</strong> {{ record.spot_id }}</p>
+        <p><strong>Vehicle Number:</strong> {{ record.vehicle_no }}</p>
+        <p><strong>Start Time:</strong> {{ record.start_time }}</p>
+        <p><strong>Cost:</strong> ₹{{ record.charge or "Pending" }}</p>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p>No parking records found for this user.</p>
+{% endif %}
 
   {% elif search_by == 'parking_lot' %}
     <h5>Results for Parking Lot: "{{ query }}"</h5>
@@ -65,13 +68,14 @@
       <div class="card mt-3">
         <div class="card-body">
           <p><strong>Spot ID:</strong> {{ results.id }}</p>
+          <p><strong>Parking Lot:</strong> {{ results.lot.name if results.lot else "Unknown" }}</p>
           <p><strong>Status:</strong> {% if results.is_available %}Available{% else %}Occupied{% endif %}</p>
           {% if not results.is_available and results.record %}
             <hr>
-            <p><strong>Vehicle Number:</strong> {{ results.record.vehicle_number }}</p>
-            <p><strong>User ID:</strong> {{ results.record.user_id }}</p>
+            <p><strong>Vehicle Number:</strong> {{ results.record.vehicle_no }}</p>
+            <p><strong>User ID:</strong> {{ results.record.display_user_id }}</p>
             <p><strong>Start Time:</strong> {{ results.record.start_time }}</p>
-            <p><strong>Estimated Cost:</strong> ₹{{ results.record.estimated_cost or "Pending" }}</p>
+            <p><strong>Estimated Cost:</strong> ₹{{ results.record.charge or "Pending" }}</p>
           {% endif %}
         </div>
       </div>

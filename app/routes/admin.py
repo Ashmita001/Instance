@@ -38,12 +38,30 @@ def home():
     return render_template('admin_home.html', parking_lots=parking_lots)
 
 
+def get_user_display_number(user_id):
+    """Convert database user_id to display number (excluding admin users)"""
+    # Get all non-admin users ordered by ID
+    non_admin_users = User.query.filter(User.role != 'admin').order_by(User.id).all()
+    user_mapping = {user.id: index + 1 for index, user in enumerate(non_admin_users)}
+    return user_mapping.get(user_id, user_id)
 
+def get_actual_user_id(display_number):
+    """Convert display number to actual database user_id"""
+    try:
+        display_number = int(display_number)
+        # Get all non-admin users ordered by ID
+        non_admin_users = User.query.filter(User.role != 'admin').order_by(User.id).all()
+        if 1 <= display_number <= len(non_admin_users):
+            return non_admin_users[display_number - 1].id
+        return None
+    except (ValueError, IndexError):
+        return None
 
 
 @admin_bp.route('/users')
 def users():
-    all_users = User.query.all()
+    # Only get non-admin users
+    all_users = User.query.filter(User.role != 'admin').all()
     return render_template('admin_users.html', users=all_users)
 
 
@@ -55,69 +73,52 @@ def search():
 
     if search_by and query:
         if search_by == 'user_id':
-            results = ParkingRecord.query.filter_by(user_id=query).all()
+            # Convert display number to actual user_id
+            actual_user_id = get_actual_user_id(query)
+            if actual_user_id:
+                results = ParkingRecord.query.filter_by(user_id=actual_user_id).all()
+                # Add display user number to each record
+                for record in results:
+                    record.display_user_id = get_user_display_number(record.user_id)
+            else:
+                results = []
 
         elif search_by == 'parking_lot':
             lots = ParkingLot.query.filter(ParkingLot.name.ilike(f"%{query}%")).all()
-            # Include spot stats like dashboard
             results = []
             for lot in lots:
                 spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
-                occupied = sum(1 for s in spots if not s.is_available)
+                for spot in spots:
+                    if not spot.is_available:
+                        spot.record = ParkingRecord.query.filter_by(spot_id=spot.id, end_time=None).first()
+                        # Add display user number to the record
+                        if spot.record:
+                            spot.record.display_user_id = get_user_display_number(spot.record.user_id)
+                    else:
+                        spot.record = None
+                
                 lot.spots = spots
-                lot.occupied_count = occupied
+                lot.occupied_count = sum(1 for s in spots if not s.is_available)
                 lot.total_spots = len(spots)
                 results.append(lot)
 
         elif search_by == 'parking_spot':
-            spot = ParkingSpot.query.filter_by(id=query).first()
-            if spot and not spot.is_available:
-                spot.record = ParkingRecord.query.filter_by(spot_id=spot.id, end_time=None).first()
-            results = spot
+            try:
+                spot_id = int(query)
+                spot = ParkingSpot.query.filter_by(id=spot_id).first()
+                if spot:
+                    spot.lot = ParkingLot.query.get(spot.lot_id)
+                    if not spot.is_available:
+                        spot.record = ParkingRecord.query.filter_by(spot_id=spot.id, end_time=None).first()
+                        # Add display user number to the record
+                        if spot.record:
+                            spot.record.display_user_id = get_user_display_number(spot.record.user_id)
+                results = spot
+            except ValueError:
+                results = None
 
     return render_template("admin_search.html", search_by=search_by, query=query, results=results)
 
-
-@admin_bp.route('/summary')
-def summary():
-    lots = ParkingLot.query.all()
-
-    labels = []
-    available_data = []
-    occupied_data = []
-    revenue_data = []
-
-    for lot in lots:
-        spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
-        spot_ids = [s.id for s in spots]
-
-        # Stats
-        total = len(spots)
-        occupied = sum(1 for s in spots if not s.is_available)
-        available = total - occupied
-
-        # Revenue from records
-        records = ParkingRecord.query.filter(ParkingRecord.spot_id.in_(spot_ids)).all()
-        total_revenue = sum((r.estimated_cost or 0) for r in records)
-        total_bookings = len(records)
-
-        # Append chart + revenue info
-        labels.append(lot.name)
-        available_data.append(available)
-        occupied_data.append(occupied)
-        revenue_data.append({
-            'name': lot.name,
-            'total_bookings': total_bookings,
-            'total_revenue': total_revenue
-        })
-
-    return render_template(
-        "admin_summary.html",
-        labels=labels,
-        available_data=available_data,
-        occupied_data=occupied_data,
-        revenue_data=revenue_data
-    )
 
 
 @admin_bp.route('/edit/<int:lot_id>', methods=['POST'])
@@ -172,48 +173,79 @@ def edit_lot(lot_id):
 
 @admin_bp.route('/add', methods=['POST'])
 def add_lot():
+    # Check if user is admin - if not, redirect to admin home with error
     if session.get('role') != 'admin':
-        return redirect(url_for('auth.login'))
+        flash("You must be logged in as admin to add parking lots.", "danger")
+        return redirect(url_for('admin.home'))
 
-    # Extract form data
-    name = request.form.get('name')
-    address = request.form.get('address')
-    pin = request.form.get('pin')
-    rate = float(request.form.get('rate'))
-    max_spots = int(request.form.get('max_spots'))
+    try:
+        # Extract form data
+        name = request.form.get('name')
+        address = request.form.get('address')
+        pin = request.form.get('pin')
+        rate = float(request.form.get('rate'))
+        max_spots = int(request.form.get('max_spots'))
 
-    # Step 1: Create the Parking Lot
-    new_lot = ParkingLot(name=name, address=address, pin=pin, rate=rate)
-    db.session.add(new_lot)
-    db.session.commit()
+        # Validate required fields
+        if not all([name, address, pin, rate, max_spots]):
+            flash("All fields are required.", "danger")
+            return redirect(url_for('admin.home'))
 
-    # Step 2: Auto-create empty parking spots
-    for i in range(1, max_spots + 1):
-        spot = ParkingSpot(
-            lot_id=new_lot.id,
-            spot_number=f"S{i:03}",  # Format like S001, S002...
-            is_available=True
-        )
-        db.session.add(spot)
+        # Step 1: Create the Parking Lot
+        new_lot = ParkingLot(name=name, address=address, pin=pin, rate=rate)
+        db.session.add(new_lot)
+        db.session.commit()
 
-    db.session.commit()
-    flash("Parking lot added successfully with empty spots.", "success")
+        # Step 2: Auto-create empty parking spots
+        for i in range(1, max_spots + 1):
+            spot = ParkingSpot(
+                lot_id=new_lot.id,
+                spot_number=f"S{i:03}",  # Format like S001, S002...
+                is_available=True
+            )
+            db.session.add(spot)
+
+        db.session.commit()
+        flash(f"Parking lot '{name}' added successfully with {max_spots} empty spots.", "success")
+        
+    except ValueError:
+        flash("Invalid input. Please check rate and max spots are valid numbers.", "danger")
+    except Exception as e:
+        db.session.rollback()
+        flash("An error occurred while adding the parking lot. Please try again.", "danger")
+    
     return redirect(url_for('admin.home'))
+
 
 
 @admin_bp.route('/delete_lot/<int:lot_id>', methods=['POST'])
 def delete_lot(lot_id):
     lot = ParkingLot.query.get_or_404(lot_id)
 
-    # Check for occupied spots (optional)
-    occupied = any(not spot.is_available for spot in lot.spots)
-    if occupied:
-        flash("Cannot delete lot with occupied spots.", "danger")
+    # Get all spots for this lot from database
+    spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+    
+    # Check for occupied spots
+    occupied_spots = [spot for spot in spots if not spot.is_available]
+    
+    if occupied_spots:
+        occupied_count = len(occupied_spots)
+        if occupied_count == 1:
+            flash(f"Cannot delete lot - there is 1 occupied spot.", "danger")
+        else:
+            flash(f"Cannot delete lot - there are {occupied_count} occupied spots.", "danger")
         return redirect(url_for('admin.home'))
 
+    # If no occupied spots, safe to delete
+    # First delete all spots associated with this lot
+    for spot in spots:
+        db.session.delete(spot)
+    
+    # Then delete the lot
     db.session.delete(lot)
     db.session.commit()
-    flash("Parking lot deleted successfully.", "success")
+    
+    flash(f"Parking lot '{lot.name}' deleted successfully.", "success")
     return redirect(url_for('admin.home'))
 
 
@@ -223,3 +255,69 @@ def delete_spot(spot_id):
     db.session.delete(spot)
     db.session.commit()
     return redirect(url_for('admin.home'))
+
+
+
+@admin_bp.route('/summary')
+def summary():
+    lots = ParkingLot.query.all()
+    
+    # Data for parking status chart
+    labels = []
+    available_data = []
+    occupied_data = []
+    
+    # Data for revenue calculations
+    revenue_data = []
+    total_revenue = 0
+    
+    for lot in lots:
+        # Get spots for this lot
+        spots = ParkingSpot.query.filter_by(lot_id=lot.id).all()
+        total_spots = len(spots)
+        occupied = sum(1 for s in spots if not s.is_available)
+        available = total_spots - occupied
+        
+        # Add to chart data
+        labels.append(lot.name)
+        available_data.append(available)
+        occupied_data.append(occupied)
+        
+        # Calculate revenue for this lot
+        records = ParkingRecord.query.join(ParkingSpot).filter(
+            ParkingSpot.lot_id == lot.id,
+            ParkingRecord.end_time.isnot(None)  # Only completed bookings
+        ).all()
+        
+        lot_revenue = 0
+        for record in records:
+            if record.end_time:
+                hours = (record.end_time - record.start_time).total_seconds() / 3600
+                cost = round(hours * lot.rate, 2)
+                lot_revenue += cost
+        
+        revenue_data.append({
+            'name': lot.name,
+            'total_revenue': lot_revenue
+        })
+        total_revenue += lot_revenue
+    
+    # Calculate summary stats
+    total_available = sum(available_data)
+    total_occupied = sum(occupied_data)
+    total_spots_all = total_available + total_occupied
+    occupancy_rate = round((total_occupied / total_spots_all * 100) if total_spots_all > 0 else 0, 2)
+    
+    earnings_summary = {
+        'total': total_revenue
+    }
+    
+    return render_template("admin_summary.html",
+                         labels=labels,
+                         available_data=available_data,
+                         occupied_data=occupied_data,
+                         revenue_data=revenue_data,
+                         earnings_summary=earnings_summary,
+                         total_available=total_available,
+                         total_occupied=total_occupied,
+                         occupancy_rate=occupancy_rate)

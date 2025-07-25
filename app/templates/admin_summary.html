@@ -1,68 +1,188 @@
 {% extends "admin_base.html" %}
 
 {% block content %}
-<h3 class="mb-4">Parking Summary</h3>
+<div class="container-fluid">
+    <h3>Parking Summary Dashboard</h3>
+    
+    <!-- Chart Row -->
+    <div class="row mb-4">
+        <!-- Parking Status Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Parking Status by Lot</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="statusChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Revenue Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Revenue by Parking Lot</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<!-- Chart: Spot Availability -->
-<canvas id="parkingSummaryChart" width="600" height="300" class="mb-5"></canvas>
+    <!-- Summary Stats -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-success">{{ total_available }}</h4>
+                    <p class="mb-0">Available Spots</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-danger">{{ total_occupied }}</h4>
+                    <p class="mb-0">Occupied Spots</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-info">{{ occupancy_rate }}%</h4>
+                    <p class="mb-0">Occupancy Rate</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4 class="text-warning">₹{{ earnings_summary.total }}</h4>
+                    <p class="mb-0">Total Revenue</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-<!-- Chart.js -->
+<!-- Chart Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const ctx = document.getElementById('parkingSummaryChart').getContext('2d');
-  const summaryChart = new Chart(ctx, {
+// Parking Status Chart (Stacked Bar)
+const statusCtx = document.getElementById('statusChart');
+new Chart(statusCtx, {
     type: 'bar',
     data: {
-      labels: {{ labels | safe }},
-      datasets: [
-        {
-          label: 'Available Spots',
-          data: {{ available_data | safe }},
-          backgroundColor: 'rgba(75, 192, 192, 0.7)',
-          borderColor: 'rgba(75, 192, 192, 1)',
-          borderWidth: 1
-        },
-        {
-          label: 'Occupied Spots',
-          data: {{ occupied_data | safe }},
-          backgroundColor: 'rgba(255, 99, 132, 0.7)',
-          borderColor: 'rgba(255, 99, 132, 1)',
-          borderWidth: 1
-        }
-      ]
+        labels: {{ labels | tojson }},
+        datasets: [{
+            label: 'Available',
+            data: {{ available_data | tojson }},
+            backgroundColor: '#28a745',
+            borderColor: '#1e7e34',
+            borderWidth: 1
+        }, {
+            label: 'Occupied',
+            data: {{ occupied_data | tojson }},
+            backgroundColor: '#dc3545',
+            borderColor: '#c82333',
+            borderWidth: 1
+        }]
     },
     options: {
-      responsive: true,
-      scales: {
-        y: {
-          beginAtZero: true,
-          stepSize: 1
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top'
+            },
+            title: {
+                display: true,
+                text: 'Available vs Occupied Spots'
+            }
+        },
+        scales: {
+            x: {
+                stacked: true
+            },
+            y: {
+                stacked: true,
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Number of Spots'
+                }
+            }
         }
-      }
     }
-  });
+});
+
+// Revenue Chart (Bar Chart)
+const revenueCtx = document.getElementById('revenueChart');
+const revenueLabels = {{ revenue_data | map(attribute='name') | list | tojson }};
+const revenueValues = {{ revenue_data | map(attribute='total_revenue') | list | tojson }};
+
+new Chart(revenueCtx, {
+    type: 'bar',
+    data: {
+        labels: revenueLabels,
+        datasets: [{
+            label: 'Total Revenue (₹)',
+            data: revenueValues,
+            backgroundColor: [
+                '#007bff',
+                '#28a745', 
+                '#ffc107',
+                '#dc3545',
+                '#6f42c1',
+                '#fd7e14',
+                '#20c997',
+                '#6c757d'
+            ],
+            borderColor: [
+                '#0056b3',
+                '#1e7e34',
+                '#e0a800',
+                '#c82333',
+                '#59359a',
+                '#e8640a',
+                '#198754',
+                '#495057'
+            ],
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            title: {
+                display: true,
+                text: 'Total Revenue per Parking Lot'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Revenue (₹)'
+                }
+            },
+            x: {
+                title: {
+                    display: true,
+                    text: 'Parking Lots'
+                }
+            }
+        }
+    }
+});
 </script>
 
-<!-- Revenue Summary Table -->
-<h4 class="mt-5">💰 Revenue Summary</h4>
-<div class="table-responsive">
-  <table class="table table-bordered table-hover mt-3">
-    <thead class="table-dark">
-      <tr>
-        <th>Parking Lot</th>
-        <th>Total Bookings</th>
-        <th>Total Revenue (₹)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for rev in revenue_data %}
-      <tr>
-        <td>{{ rev.name }}</td>
-        <td>{{ rev.total_bookings }}</td>
-        <td>₹{{ "%.2f"|format(rev.total_revenue or 0) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
 {% endblock %}

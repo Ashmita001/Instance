@@ -1,33 +1,198 @@
 <!-- templates/user_summary.html -->
-{% extends "user_base.html" %}
+{% extends "user_dashboard.html" %}
 
 {% block content %}
-<h4>Your Parking Summary</h4>
-<canvas id="parkingChart" width="600" height="300" class="mt-4"></canvas>
+<div class="container mt-4">
+    <h4>Your Parking Summary</h4>
+    
+    <!-- Summary Stats Cards -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title text-primary">{{ total_sessions }}</h3>
+                    <p class="card-text">Total Sessions</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title text-danger">{{ occupied_count }}</h3>
+                    <p class="card-text">Currently Occupied</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title text-success">{{ released_count }}</h3>
+                    <p class="card-text">Released</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title text-warning">₹{{ total_charges }}</h3>
+                    <p class="card-text">Total Charges</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Row -->
+    <div class="row mt-4">
+        <!-- Pie Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h5>Parking Status Overview</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="statusPieChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Bar Chart -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h5>Daily Parking Duration (Hours)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="durationBarChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const ctx = document.getElementById('parkingChart').getContext('2d');
-  const parkingChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: { ...chart_labels },
-      datasets: [{
-        label: 'Hours Parked per Day',
-        data: { ...chart_data },
-        backgroundColor: 'rgba(54, 162, 235, 0.7)',
-        borderColor: 'rgba(54, 162, 235, 1)',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        y: {
-          beginAtZero: true
+document.addEventListener('DOMContentLoaded', function() {
+    // Data from Flask
+    const occupiedCount = {{ occupied_count }};
+    const releasedCount = {{ released_count }};
+    const chartLabels = {{ chart_labels|safe }};
+    const chartData = {{ chart_data|safe }};
+    
+    console.log('Chart Labels:', chartLabels);
+    console.log('Chart Data:', chartData);
+    
+    // 1. Pie Chart for Occupied vs Released
+    const pieCtx = document.getElementById('statusPieChart').getContext('2d');
+    
+    const statusPieChart = new Chart(pieCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Currently Occupied', 'Released'],
+            datasets: [{
+                data: [occupiedCount, releasedCount],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.8)',   // Red for occupied
+                    'rgba(75, 192, 192, 0.8)'    // Green for released
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(75, 192, 192, 1)'
+                ],
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Occupied vs Released',
+                    font: { size: 14 }
+                },
+                legend: {
+                    display: true,
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = occupiedCount + releasedCount;
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
         }
-      }
-    }
-  });
+    });
+
+    // 2. Bar Chart for Daily Duration
+    const barCtx = document.getElementById('durationBarChart').getContext('2d');
+    
+    const durationBarChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                label: 'Hours Parked',
+                data: chartData,
+                backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Parking Duration Trends',
+                    font: { size: 14 }
+                },
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Hours'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            }
+        }
+    });
+});
 </script>
+
+<style>
+.card {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+.text-primary { color: #007bff !important; }
+.text-danger { color: #dc3545 !important; }
+.text-success { color: #28a745 !important; }
+.text-warning { color: #ffc107 !important; }
+
+canvas {
+    max-height: 300px;
+}
+</style>
 {% endblock %}

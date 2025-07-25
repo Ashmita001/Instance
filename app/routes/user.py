@@ -27,9 +27,6 @@ def available_spot(lot_id):
 
 @user_bp.route('/reserve_spot', methods=['POST'])
 def reserve_spot():
-    # Debug: Show what we received
-    flash(f"DEBUG: Form data received: {dict(request.form)}", 'info')
-    
     if 'user_id' not in session:
         flash('Please login to reserve a spot.', 'danger')
         return redirect(url_for('auth.login'))
@@ -37,12 +34,9 @@ def reserve_spot():
     # Get form data
     spot_id = request.form.get('spot_id')
     lot_id = request.form.get('lot_id')
-    user_id = request.form.get('user_id')
+    user_id = session.get('user_id')  # Get from session instead of form for security
     vehicle_no = request.form.get('vehicle_no')
     
-    # Debug: Check what we extracted
-    flash(f"DEBUG: Extracted - spot_id: {spot_id}, lot_id: {lot_id}, user_id: {user_id}, vehicle_no: {vehicle_no}", 'info')
-
     # Validate inputs
     if not all([spot_id, lot_id, user_id, vehicle_no]):
         flash('All fields are required.', 'danger')
@@ -90,11 +84,11 @@ def reserve_spot():
         db.session.add(new_record)
         db.session.commit()
 
-        flash(f'SUCCESS: Parking spot {spot_id} reserved successfully!', 'success')
+        flash(f'Parking spot {spot_id} reserved successfully!', 'success')
         
     except Exception as e:
         db.session.rollback()
-        flash(f'ERROR: Failed to reserve spot - {str(e)}', 'danger')
+        flash(f'Failed to reserve spot. Please try again.', 'danger')
     
     return redirect(url_for('user.dashboard'))
 
@@ -103,11 +97,11 @@ def search_parking():
     if 'user_id' not in session:
         return redirect(url_for('auth.login'))
     
-    location = request.args.get('name')
+    name = request.args.get('name')
     user_id = session.get('user_id')
     user = User.query.get(user_id)
 
-    parking_lots = ParkingLot.query.filter(ParkingLot.address.ilike(f"%{location}%")).all()
+    parking_lots = ParkingLot.query.filter(ParkingLot.name.ilike(f"%{name}%")).all()
 
     # Add available spot count
     for lot in parking_lots:
@@ -116,7 +110,7 @@ def search_parking():
     history = ParkingRecord.query.filter_by(user_id=user_id).order_by(ParkingRecord.start_time.desc()).all()
 
     return render_template('user_home.html', user=user, history=history,
-                           parking_lots=parking_lots, search_location=location)
+                           parking_lots=parking_lots, search_location=name)
 
 @user_bp.route('/release/<int:record_id>', methods=['POST'])
 def release_parking(record_id):
@@ -153,7 +147,7 @@ def release_parking(record_id):
         
     except Exception as e:
         db.session.rollback()
-        flash(f'Error releasing spot: {str(e)}', 'danger')
+        flash('Error releasing spot. Please try again.', 'danger')
     
     return redirect(url_for('user.dashboard'))
 
@@ -164,29 +158,43 @@ def summary():
 
     user_id = session['user_id']
     records = ParkingRecord.query.filter_by(user_id=user_id).all()
-
-    daily_data = {}
-    for rec in records:
-        if rec.status == 'released' and rec.start_time and rec.end_time:
-            day = rec.start_time.date().isoformat()
-            duration = (rec.end_time - rec.start_time).total_seconds() / 3600
-            daily_data[day] = daily_data.get(day, 0) + round(duration, 2)
-
-    chart_labels = list(daily_data.keys())
-    chart_data = list(daily_data.values())
-
-    return render_template('user_summary.html', chart_labels=chart_labels, chart_data=chart_data)
-
-# Quick test route to verify basic functionality
-@user_bp.route('/test_form', methods=['GET', 'POST'])
-def test_form():
-    if request.method == 'POST':
-        flash(f"Test form received: {dict(request.form)}", 'info')
-        return redirect(url_for('user.dashboard'))
     
-    return '''
-    <form method="POST">
-        <input type="text" name="test_field" value="test_value" required>
-        <button type="submit">Test Submit</button>
-    </form>
-    '''
+    # Count occupied and released spots
+    occupied_count = 0
+    released_count = 0
+    total_charges = 0
+    
+    # For duration trends (daily data)
+    daily_data = {}
+    
+    for rec in records:
+        if rec.status == 'parked':
+            occupied_count += 1
+        elif rec.status == 'released':
+            released_count += 1
+            
+            # Add to total charges
+            if rec.charge:
+                total_charges += rec.charge
+            
+            # Add to daily duration data
+            if rec.start_time and rec.end_time:
+                day = rec.start_time.date().isoformat()
+                duration = (rec.end_time - rec.start_time).total_seconds() / 3600
+                daily_data[day] = daily_data.get(day, 0) + round(duration, 2)
+    
+    # Sort daily data by date
+    sorted_daily_data = dict(sorted(daily_data.items()))
+    chart_labels = list(sorted_daily_data.keys())
+    chart_data = list(sorted_daily_data.values())
+    
+    # Total sessions
+    total_sessions = len(records)
+
+    return render_template('user_summary.html', 
+                         occupied_count=occupied_count, 
+                         released_count=released_count,
+                         total_sessions=total_sessions,
+                         total_charges=round(total_charges, 2),
+                         chart_labels=chart_labels,
+                         chart_data=chart_data)

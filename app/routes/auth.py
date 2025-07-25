@@ -38,7 +38,7 @@ def login():
             session['role'] = user.role
 
             if user.role == 'admin':
-                return redirect(url_for('admin.base'))  # You need to define this route
+                return redirect(url_for('admin.home'))  # You need to define this route
             else:
                 return redirect(url_for('user.dashboard'))
 
@@ -57,11 +57,12 @@ def signup():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
+        address = request.form['address']  # Add this
+        pin = request.form['pin']          # Add this
 
         # Validation: username length
         if not (4 <= len(username) <= 20):
-            return render_template("signup.html",message="Username is required!")
-            # flash('Username must be between 4 and 20 characters.', 'error')
+            flash('Username must be between 4 and 20 characters.', 'error')
             return render_template('signup.html')
 
         # Validation: password length
@@ -75,22 +76,38 @@ def signup():
             flash('Invalid email address.', 'error')
             return render_template('signup.html')
 
+        # Validation: PIN code (should be 6 digits)
+        if not (pin.isdigit() and len(pin) == 6):
+            flash('PIN code must be exactly 6 digits.', 'error')
+            return render_template('signup.html')
+
+        # Validation: address length
+        if not (10 <= len(address) <= 200):
+            flash('Address must be between 10 and 200 characters.', 'error')
+            return render_template('signup.html')
+
         # Check if user already exists
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
             flash('Email already registered. Please use a different email.', 'error')
             return render_template('signup.html')
 
-        existing_user = User.query.filter_by(email=email).first()
-        if not existing_user:
-            hashed_password = generate_password_hash(password)
-            new_user = User(username=username, email=email, password_hash=hashed_password)
-            db.session.add(new_user)
-            db.session.commit()
-            return redirect(url_for('auth.login'))
+        # Create new user with address and pin
+        hashed_password = generate_password_hash(password)
+        new_user = User(
+            username=username, 
+            email=email, 
+            password_hash=hashed_password,
+            address=address,    # Add this
+            pin=pin            # Add this
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        
+        flash('Account created successfully! Please login.', 'success')
+        return redirect(url_for('auth.login'))
 
     return render_template('signup.html')
-
 
 # ---------------------
 # Route: Logout

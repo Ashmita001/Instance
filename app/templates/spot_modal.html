@@ -14,9 +14,8 @@
         {% else %}
           <div class="border rounded p-2 bg-light">
             <p><strong>Customer ID:</strong> {{ spot.record.user_id }}</p>
-            <p><strong>Vehicle Number:</strong> {{ spot.record.vehicle_number }}</p>
+            <p><strong>Vehicle Number:</strong> {{ spot.record.vehicle_no }}</p>
             <p><strong>Parked At:</strong> {{ spot.record.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</p>
-            <p><strong>Estimated Cost:</strong> ₹{{ spot.record.estimated_cost }}</p>
           </div>
         {% endif %}
       </div>
