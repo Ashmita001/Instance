@@ -1,15 +1,14 @@
 # app/routes/admin.py
-from app.models import User, ParkingLot, ParkingSpot, ParkingRecord
+from app.models.user import User  # Updated import
+from app.models import ParkingLot, ParkingSpot, ParkingRecord
 from app import db
-from flask import Blueprint, render_template, session, redirect, url_for,request,flash
+from flask import Blueprint, render_template, session, redirect, url_for, request, flash
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 @admin_bp.route('/base')
 def base():
     return render_template('admin_base.html')
-
-
 
 @admin_bp.route('/')
 def home():
@@ -37,33 +36,30 @@ def home():
 
     return render_template('admin_home.html', parking_lots=parking_lots)
 
-
 def get_user_display_number(user_id):
-    """Convert database user_id to display number (excluding admin users)"""
-    # Get all non-admin users ordered by ID
-    non_admin_users = User.query.filter(User.role != 'admin').order_by(User.id).all()
-    user_mapping = {user.id: index + 1 for index, user in enumerate(non_admin_users)}
+    """Convert database user_id to display number (all users now since no role field)"""
+    # Get all users ordered by ID
+    all_users = User.query.order_by(User.id).all()
+    user_mapping = {user.id: index + 1 for index, user in enumerate(all_users)}
     return user_mapping.get(user_id, user_id)
 
 def get_actual_user_id(display_number):
     """Convert display number to actual database user_id"""
     try:
         display_number = int(display_number)
-        # Get all non-admin users ordered by ID
-        non_admin_users = User.query.filter(User.role != 'admin').order_by(User.id).all()
-        if 1 <= display_number <= len(non_admin_users):
-            return non_admin_users[display_number - 1].id
+        # Get all users ordered by ID
+        all_users = User.query.order_by(User.id).all()
+        if 1 <= display_number <= len(all_users):
+            return all_users[display_number - 1].id
         return None
     except (ValueError, IndexError):
         return None
 
-
 @admin_bp.route('/users')
 def users():
-    # Only get non-admin users
-    all_users = User.query.filter(User.role != 'admin').all()
+    # Get all users (no role filtering needed since users table only has regular users)
+    all_users = User.query.all()
     return render_template('admin_users.html', users=all_users)
-
 
 @admin_bp.route('/search', methods=['GET'])
 def search():
@@ -119,8 +115,6 @@ def search():
 
     return render_template("admin_search.html", search_by=search_by, query=query, results=results)
 
-
-
 @admin_bp.route('/edit/<int:lot_id>', methods=['POST'])
 def edit_lot(lot_id):
     lot = ParkingLot.query.get_or_404(lot_id)
@@ -170,7 +164,6 @@ def edit_lot(lot_id):
     flash("Parking lot updated successfully.", "success")
     return redirect(url_for('admin.home'))
 
-
 @admin_bp.route('/add', methods=['POST'])
 def add_lot():
     # Check if user is admin - if not, redirect to admin home with error
@@ -216,8 +209,6 @@ def add_lot():
     
     return redirect(url_for('admin.home'))
 
-
-
 @admin_bp.route('/delete_lot/<int:lot_id>', methods=['POST'])
 def delete_lot(lot_id):
     lot = ParkingLot.query.get_or_404(lot_id)
@@ -248,15 +239,12 @@ def delete_lot(lot_id):
     flash(f"Parking lot '{lot.name}' deleted successfully.", "success")
     return redirect(url_for('admin.home'))
 
-
 @admin_bp.route('/delete-spot/<int:spot_id>', methods=['POST'])
 def delete_spot(spot_id):
     spot = ParkingSpot.query.get_or_404(spot_id)
     db.session.delete(spot)
     db.session.commit()
     return redirect(url_for('admin.home'))
-
-
 
 @admin_bp.route('/summary')
 def summary():

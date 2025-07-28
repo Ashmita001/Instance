@@ -15,3 +15,4 @@ class ParkingRecord(db.Model):
     charge = db.Column(db.Float, default=0.0)
     
     lot = db.relationship('ParkingLot', backref='records')
+    user = db.relationship('User', backref='parking_records')

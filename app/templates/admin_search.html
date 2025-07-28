@@ -30,6 +30,7 @@
     <div class="card mt-3">
       <div class="card-body">
         <p><strong>Spot ID:</strong> {{ record.spot_id }}</p>
+        <p><strong>User Name:</strong> {{ record.user.username }}</p>
         <p><strong>Vehicle Number:</strong> {{ record.vehicle_no }}</p>
         <p><strong>Start Time:</strong> {{ record.start_time }}</p>
         <p><strong>Cost:</strong> ₹{{ record.charge or "Pending" }}</p>

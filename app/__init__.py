@@ -37,18 +37,17 @@ def create_app() -> Flask:
         db.create_all()
 
         # Import models *after* db.init_app(app) so the metadata is bound
-        from app.models.user import User                           # noqa: E402
+        from app.models.admin import Admin  # Import Admin model instead
 
         # Credentials come from env vars with safe defaults
         admin_email = os.environ.get("APP_ADMIN_EMAIL", "admin@gmail.com")
-        admin_pass  = os.environ.get("APP_ADMIN_PASSWORD", "admin123")
+        admin_pass = os.environ.get("APP_ADMIN_PASSWORD", "admin123")
 
         # Only create if an admin with that e-mail doesn't exist
-        if not User.query.filter_by(email=admin_email).first():
-            admin = User(
-                username="admin",
+        if not Admin.query.filter_by(email=admin_email).first():
+            admin = Admin(
+                username="admin",  # Add this line
                 email=admin_email,
-                role="admin",
                 password_hash=generate_password_hash(admin_pass),
             )
             db.session.add(admin)

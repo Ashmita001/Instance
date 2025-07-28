@@ -1,13 +1,15 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, jsonify
 from datetime import datetime, timedelta
-from app.models import User, ParkingLot, ParkingSpot, ParkingRecord
+from app.models.user import User  # Updated import
+from app.models import ParkingLot, ParkingSpot, ParkingRecord
 from app import db
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 
 @user_bp.route('/dashboard')
 def dashboard():
-    if session.get('role') != 'user':
+    # Check if user is logged in and is a regular user (not admin)
+    if 'user_id' not in session or session.get('role') != 'user':
         return redirect(url_for('auth.login'))
 
     user_id = session.get('user_id')
@@ -29,7 +31,7 @@ def available_spot(lot_id):
 def reserve_spot():
     if 'user_id' not in session:
         flash('Please login to reserve a spot.', 'danger')
-        return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.dashboard'))
     
     # Get form data
     spot_id = request.form.get('spot_id')

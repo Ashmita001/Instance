@@ -1,16 +1,12 @@
+# app/routes/auth.py
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from app.models.user import User
+from app.models.admin import Admin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
-from app.models.user import User
 import re
+
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
-
-
-# python
-# web dev - overview (manager) functionality
-# 
-
 
 # ---------------------
 # Route: Login
@@ -31,22 +27,24 @@ def login():
             flash('Invalid email address.', 'error')
             return render_template('login.html')
 
-        user = User.query.filter_by(email=email).first()
+        # Check admin table first
+        admin = Admin.query.filter_by(email=email).first()
+        if admin and admin.check_password(password):
+            session['user_id'] = admin.id
+            session['role'] = 'admin'
+            return redirect(url_for('admin.home'))
 
+        # Check user table
+        user = User.query.filter_by(email=email).first()
         if user and user.check_password(password):
             session['user_id'] = user.id
-            session['role'] = user.role
-
-            if user.role == 'admin':
-                return redirect(url_for('admin.home'))  # You need to define this route
-            else:
-                return redirect(url_for('user.dashboard'))
+            session['role'] = 'user'
+            return redirect(url_for('user.dashboard'))
 
         flash('Incorrect email or password!', 'error')
         return redirect(url_for('auth.login'))
 
     return render_template('login.html')
-
 
 # ---------------------
 # Route: Signup
@@ -57,8 +55,7 @@ def signup():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        address = request.form['address']  # Add this
-        pin = request.form['pin']          # Add this
+        role = request.form.get('role', 'user')
 
         # Validation: username length
         if not (4 <= len(username) <= 20):
@@ -76,34 +73,47 @@ def signup():
             flash('Invalid email address.', 'error')
             return render_template('signup.html')
 
-        # Validation: PIN code (should be 6 digits)
-        if not (pin.isdigit() and len(pin) == 6):
-            flash('PIN code must be exactly 6 digits.', 'error')
-            return render_template('signup.html')
-
-        # Validation: address length
-        if not (10 <= len(address) <= 200):
-            flash('Address must be between 10 and 200 characters.', 'error')
-            return render_template('signup.html')
-
-        # Check if user already exists
+        # Check if email already exists in both tables
         existing_user = User.query.filter_by(email=email).first()
-        if existing_user:
+        existing_admin = Admin.query.filter_by(email=email).first()
+        
+        if existing_user or existing_admin:
             flash('Email already registered. Please use a different email.', 'error')
             return render_template('signup.html')
 
-        # Create new user with address and pin
-        hashed_password = generate_password_hash(password)
-        new_user = User(
-            username=username, 
-            email=email, 
-            password_hash=hashed_password,
-            address=address,    # Add this
-            pin=pin            # Add this
-        )
-        db.session.add(new_user)
-        db.session.commit()
+        if role == 'admin':
+            # Create admin
+            new_admin = Admin(
+                username=username,  # Add this back
+                email=email,
+                password_hash=generate_password_hash(password)
+            )
+            db.session.add(new_admin)
+        else:
+            # Create regular user
+            address = request.form['address']
+            pin = request.form['pin']
+
+            # Validation: PIN code (should be 6 digits)
+            if not (pin.isdigit() and len(pin) == 6):
+                flash('PIN code must be exactly 6 digits.', 'error')
+                return render_template('signup.html')
+
+            # Validation: address length
+            if not (10 <= len(address) <= 200):
+                flash('Address must be between 10 and 200 characters.', 'error')
+                return render_template('signup.html')
+
+            new_user = User(
+                username=username, 
+                email=email, 
+                password_hash=generate_password_hash(password),
+                address=address,
+                pin=pin
+            )
+            db.session.add(new_user)
         
+        db.session.commit()
         flash('Account created successfully! Please login.', 'success')
         return redirect(url_for('auth.login'))
 
