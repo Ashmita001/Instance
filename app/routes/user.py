@@ -117,40 +117,34 @@ def search_parking():
 @user_bp.route('/release/<int:record_id>', methods=['POST'])
 def release_parking(record_id):
     if 'user_id' not in session:
-        flash('Please login to release a spot.', 'danger')
+        flash('Please login first.', 'danger')
         return redirect(url_for('auth.login'))
     
     record = ParkingRecord.query.get_or_404(record_id)
-
-    # Check ownership
-    if record.user_id != session['user_id']:
-        flash('You can only release your own parking spots.', 'danger')
-        return redirect(url_for('user.dashboard'))
-
-    if record.status == 'released':
-        flash("This spot has already been released.", "info")
-        return redirect(url_for('user.dashboard'))
-
-    try:
-        record.status = 'released'
-        record.end_time = datetime.utcnow()
-
-        # Calculate charges
-        duration = (record.end_time - record.start_time).total_seconds() / 3600
-        lot = ParkingLot.query.get(record.lot_id)
-        record.charge = round(duration * lot.rate, 2)
-
-        # Mark spot as available
-        spot = ParkingSpot.query.get(record.spot_id)
-        spot.is_available = True
-
-        db.session.commit()
-        flash(f"Parking spot released successfully. Charge: ₹{record.charge}", "success")
-        
-    except Exception as e:
-        db.session.rollback()
-        flash('Error releasing spot. Please try again.', 'danger')
     
+    if record.user_id != session['user_id']:
+        flash('You can only release your own spots.', 'danger')
+        return redirect(url_for('user.dashboard'))
+    
+    if record.status == 'released':
+        flash("Spot already released.", "info")
+        return redirect(url_for('user.dashboard'))
+    
+    record.status = 'released'
+    record.end_time = datetime.utcnow()
+    
+    time_parked = (record.end_time - record.start_time).total_seconds() / 3600
+    
+    lot = ParkingLot.query.get(record.lot_id)
+    
+    record.charge = round(time_parked * lot.rate, 2)
+    
+    spot = ParkingSpot.query.get(record.spot_id)
+    spot.is_available = True
+    
+    db.session.commit()
+    
+    flash(f"Spot released! Charge: ₹{record.charge}", "success")
     return redirect(url_for('user.dashboard'))
 
 @user_bp.route('/summary')

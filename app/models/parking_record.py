@@ -11,7 +11,7 @@ class ParkingRecord(db.Model):
     vehicle_no = db.Column(db.String(20))
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime, nullable=True)
-    status = db.Column(db.String(20), default='parked')  # parked or released
+    status = db.Column(db.String(20), default='parked')  
     charge = db.Column(db.Float, default=0.0)
     
     lot = db.relationship('ParkingLot', backref='records')

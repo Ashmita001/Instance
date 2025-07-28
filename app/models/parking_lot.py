@@ -10,6 +10,5 @@ class ParkingLot(db.Model):
     address = db.Column(db.String(150), nullable=False)
     pin = db.Column(db.Integer, nullable=True)
     rate = db.Column(db.Integer, nullable=False)
-
-    # One-to-many relationship
+   
     spots = db.relationship('ParkingSpot', backref='lot', lazy=True, cascade='all, delete-orphan')
